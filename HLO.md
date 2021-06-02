@@ -28,8 +28,8 @@ TaxiBot - небольшой бот в Telegram, который позволяе
 > [Яндекс.Такси](https://youtu.be/8aPpF15_gTA) - 200 р.  
 > [Uber](https://youtu.be/dQw4w9WgXcQ)        - 180 р.  
 > [Ситимобил](https://youtu.be/PGNiXGX2nLU)    - 185 р.  
-> [vk](https://youtu.be/CIepe6KMSYs)           - 666 р.  
-> [Bolt](https://youtu.be/YQyue_X4Pk4)         - 10 р.  
+> [vk](https://youtu.be/YQyue_X4Pk4)           - 666 р.  
+> [Bolt](https://youtu.be/CIepe6KMSYs)         - 10 р.  
 > 
 > Нажмите на название такси, чтобы открыть приложение сервиса!
 
