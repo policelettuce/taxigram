@@ -6,6 +6,9 @@ from telebot import types
 bot = telebot.TeleBot(config.token)
 
 
+
+
+
 @bot.message_handler(commands='start')
 def send_welcome(message):
     bot.reply_to(message,
@@ -22,7 +25,7 @@ def send_help(message):
 @bot.message_handler(content_types=["location"])
 def location(message):
     if message.location is not None:
-        bot.send_message("latitude: %s; longitude: %s" % (message.location.latitude, message.location.longitude))
+        print("latitude: %s; longitude: %s" % (message.location.latitude, message.location.longitude))
 
 
 bot.polling(none_stop=True)
