@@ -22,7 +22,7 @@ def send_help(message):
 @bot.message_handler(content_types=["location"])
 def location(message):
     if message.location is not None:
-        print("latitude: %s; longitude: %s" % (message.location.latitude, message.location.longitude))
+        bot.send_message("latitude: %s; longitude: %s" % (message.location.latitude, message.location.longitude))
 
 
 bot.polling(none_stop=True)
