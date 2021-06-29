@@ -1,5 +1,6 @@
 import telebot
 import config
+import requests
 import random
 
 from telebot import types
@@ -58,6 +59,8 @@ def buttons(message):
         bot.send_message(message.chat.id, "Отправь точку конца маршрута с помощью геопозиции Telegram...")
     elif message.text == '$$$':
         bot.send_message(message.chat.id, "Выкачано 14 000 р. из 28 000 000 р. Продолжить?")
+        cost = getcost(findlocalid(message.chat.id))
+        bot.send_message(message.chat.id, cost)
     else:
         bot.send_message(message.chat.id, "Чего? (invalid input)")
 
@@ -93,6 +96,18 @@ def findlocalid(userid):
 
     print("func finished! ", switches, " ", chatids, " ", startpos, " ", finishpos)
     return localid
+
+
+def getcost(localid):
+    global startpos, finishpos, chatids, switches
+    route = startpos[localid]+str("~")+finishpos[localid]
+    #route = '30.238564,60.034147~30.261273,60.008465'
+    url = 'https://taxi-routeinfo.taxi.yandex.net/taxi_info?clid=' + config.clid + '&apikey=' + config.apikey + '&rll=' + route
+    res = requests.get(url)
+    json = res.json()
+    cost = json['options'][0]['price']
+
+    return cost;
 
 
 def keyboard():
