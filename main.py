@@ -1,5 +1,6 @@
 import telebot
 import config
+import requests
 import random
 
 from telebot import types
@@ -15,15 +16,14 @@ finishpos = []
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.send_message(message.chat.id,
-                     "Привет! Я - бот, который поможет тебе найти самое выгодное предложение такси. Для начала просто "
-                     "отправь мне геопозицию Telegram с точкой, куда необходимо вызвать такси.")
-    bot.send_message(message.chat.id, "Для начала выбери, какую из двух точек маршрута ты хочешь отметить.", reply_markup=keyboard())
+                     "Привет! Я - бот, который поможет тебе найти самое выгодное предложение такси.")
+    bot.send_message(message.chat.id, "Выбери, какую из двух точек маршрута ты хочешь отметить. Отправь две геопозиции, а затем нажми третью кнопку.", reply_markup=keyboard())
 
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
     bot.send_message(message.chat.id,
-                     "Для начала выбери, какую из двух точек маршрута ты хочешь отметить.")
+                     "Выбери, какую из двух точек маршрута ты хочешь отметить. Затем отправь статичную геопозицию Telegram. Когда укажешь две точки, жми на $$$!")
 
 
 @bot.message_handler(commands=['check'])
@@ -41,23 +41,32 @@ def location(message):
         lon = str(message.location.longitude) + str(",")
         localid = findlocalid(message.chat.id)  # передаем chat id и находим для этого чата локальный id
 
-        if switches[localid] == 1:  # switches == 1 -> определяем стартовую позицию
-            startpos[localid] = lon + lat  # switches == 2 -> определяем конечную позицию
+        if switches[localid] == 1:              # switches == 1 -> определяем стартовую позицию
+            startpos[localid] = lon + lat       # switches == 2 -> определяем конечную позицию
         elif switches[localid] == 2:
             finishpos[localid] = lon + lat
+
+    bot.send_message(message.chat.id, 'Точка сохранена! Теперь отметь другую точку или узнай цену поездки по маршруту.')
 
 
 @bot.message_handler(content_types=['text'])
 def buttons(message):
     global chatids, switches
+    chatid = message.chat.id
     if message.text == 'Начало поездки':
         switchto1(message)
-        bot.send_message(message.chat.id, "Отправь точку начала маршрута с помощью геопозиции Telegram...")
+        bot.send_message(chatid, "Отправь точку начала маршрута с помощью геопозиции Telegram...")
     elif message.text == 'Конец поездки':
         switchto2(message)
-        bot.send_message(message.chat.id, "Отправь точку конца маршрута с помощью геопозиции Telegram...")
+        bot.send_message(chatid, "Отправь точку конца маршрута с помощью геопозиции Telegram...")
     elif message.text == '$$$':
-        bot.send_message(message.chat.id, "Выкачано 14 000 р. из 28 000 000 р. Продолжить?")
+        localid = findlocalid(chatid)
+        cost = int(getcost(localid))
+        if cost == -1:
+            poserror(chatid, localid)
+        else:
+            res = formatresult(localid, chatid, cost)
+            bot.send_message(chatid, res, parse_mode='MarkdownV2')
     else:
         bot.send_message(message.chat.id, "Чего? (invalid input)")
 
@@ -94,6 +103,56 @@ def findlocalid(userid):
     print("func finished! ", switches, " ", chatids, " ", startpos, " ", finishpos)
     return localid
 
+
+def getcost(localid):
+    global startpos, finishpos, chatids, switches
+
+    if startpos[localid] != 'TEST STRING' and finishpos[localid] != 'STRING TEST':
+        route = startpos[localid] + str("~") + finishpos[localid]
+        url = 'https://taxi-routeinfo.taxi.yandex.net/taxi_info?clid=' + config.clid + '&apikey=' + config.apikey + '&rll=' + route
+        res = requests.get(url)
+        json = res.json()
+        cost = json['options'][0]['price']
+    else:
+        cost = -1;
+    return cost;
+
+
+def poserror(chatid, localid):
+    global startpos, finishpos
+
+    print('poserror working...')
+    if startpos[localid] == 'TEST STRING' and finishpos[localid] == 'STRING TEST':
+        bot.send_message(chatid, 'Сначала нужно отметить обе точки маршрута!')
+    elif startpos[localid] != 'TEST STRING' and finishpos[localid] == 'STRING TEST':
+        bot.send_message(chatid, 'Нужно отметить конец маршрута!')
+    elif startpos[localid] == 'TEST STRING' and finishpos[localid] != 'STRING TEST':
+        bot.send_message(chatid, 'Нужно отметить начало маршрута!')
+
+
+def createlink(localid):
+    global startpos, finishpos
+    start = startpos[localid].split(sep=',')
+    finish = finishpos[localid].split(sep=',')
+
+    link = ('https://3.redirect.appmetrica.yandex.com/route?start-lat=' + start[1] + '&start-lon=' + start[0] +
+            '&end-lat=' + finish[1] + '&end-lon=' + finish[0] + '&level=50&appmetrica_tracking_id=1178268795219780156')
+
+    return link;
+
+
+def formatresult(localid, chatid, cost):
+
+    fake1 = cost + random.randint(cost//10*-1, cost//10)
+    fake2 = cost + random.randint(cost//10*-1, cost//10)
+
+    url = createlink(localid)
+    url2 = 'https://youtu.be/dQw4w9WgXcQ'
+    url3 = 'https://youtu.be/8aPpF15_gTA'
+    res = ('[Яндекс:](' + url + ') ' + str(cost) + " р\n" + '[FakeTaxi 1:](' + url2 + ') ' +
+                 str(fake1) + " р\n" + '[FakeTaxi 2:](' + url3 + ') ' + str(fake2) + " р\n")
+
+    return res;
 
 def keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
