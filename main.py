@@ -75,14 +75,12 @@ def switchto1(message):
     global switches
     localid = findlocalid(message.chat.id)
     switches[localid] = 1
-    print("switch at localid ", localid, " changed to 1")
 
 
 def switchto2(message):
     global switches
     localid = findlocalid(message.chat.id)
     switches[localid] = 2
-    print("switch at localid ", localid, " changed to 2")
 
 
 def findlocalid(userid):
@@ -100,7 +98,6 @@ def findlocalid(userid):
         if chatids[i] == userid:
             localid = i
 
-    print("func finished! ", switches, " ", chatids, " ", startpos, " ", finishpos)
     return localid
 
 
@@ -121,7 +118,6 @@ def getcost(localid):
 def poserror(chatid, localid):
     global startpos, finishpos
 
-    print('poserror working...')
     if startpos[localid] == 'TEST STRING' and finishpos[localid] == 'STRING TEST':
         bot.send_message(chatid, 'Сначала нужно отметить обе точки маршрута!')
     elif startpos[localid] != 'TEST STRING' and finishpos[localid] == 'STRING TEST':
