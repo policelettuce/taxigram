@@ -2,15 +2,19 @@ import telebot
 import config
 import requests
 import random
+import sqlite3
 
 from telebot import types
 
 bot = telebot.TeleBot(config.token)
 
-chatids = []
-switches = []
-startpos = []
-finishpos = []
+con = sqlite3.connect("taxigram.db", check_same_thread=False)
+cursor = con.cursor()
+
+# chatids = []
+# switches = []
+# startpos = []
+# finishpos = []
 
 
 @bot.message_handler(commands=['start'])
@@ -28,127 +32,133 @@ def send_help(message):
 
 @bot.message_handler(commands=['check'])
 def check(message):
-    global startpos, finishpos, chatids, switches
-    print("check! ", switches, " ", chatids, " ", startpos, " ", finishpos)
+    pass
+    # global startpos, finishpos, chatids, switches
+    # print("check! ", switches, " ", chatids, " ", startpos, " ", finishpos)
 
 
 @bot.message_handler(content_types=["location"])
 def location(message):
-    global startpos, finishpos, chatids, switches
-
-    if message.location is not None:
+    if message.location is not None:                            # if the message, received by bot, is a tg geoposition
         lat = str(message.location.latitude)
-        lon = str(message.location.longitude) + str(",")
-        localid = findlocalid(message.chat.id)  # передаем chat id и находим для этого чата локальный id
+        lon = str(message.location.longitude)
+        check_if_entry_exists(message.chat.id)                  # if there is no entry in DB for this chat - make one
+        ptr = cursor.execute("SELECT pointer FROM Data WHERE chat_id = " + str(message.chat.id) + ";").fetchall()[0][0]
 
-        if switches[localid] == 1:              # switches == 1 -> определяем стартовую позицию
-            startpos[localid] = lon + lat       # switches == 2 -> определяем конечную позицию
-        elif switches[localid] == 2:
-            finishpos[localid] = lon + lat
+        if ptr == 1:              # pointer == 1 -> setting starting geoposition
+            cursor.execute("UPDATE Data SET latitude_1 = " + lat + ", longitude_1 = " + lon + " WHERE chat_id = " + str(message.chat.id) + ";")
+            con.commit()
+        elif ptr == 2:            # pointer == 2 -> setting finishing geoposition
+            cursor.execute("UPDATE Data SET latitude_2 = " + lat + ", longitude_2 = " + lon + " WHERE chat_id = " + str(message.chat.id) + ";")
+            con.commit()
 
     bot.send_message(message.chat.id, 'Точка сохранена! Теперь отметь другую точку или узнай цену поездки по маршруту.')
 
 
 @bot.message_handler(content_types=['text'])
 def buttons(message):
-    global chatids, switches
-    chatid = message.chat.id
+    chat_id = message.chat.id
     if message.text == 'Начало поездки':
         switchto1(message)
-        bot.send_message(chatid, "Отправь точку начала маршрута с помощью геопозиции Telegram...")
+        bot.send_message(chat_id, "Отправь точку начала маршрута с помощью геопозиции Telegram...")
     elif message.text == 'Конец поездки':
         switchto2(message)
-        bot.send_message(chatid, "Отправь точку конца маршрута с помощью геопозиции Telegram...")
+        bot.send_message(chat_id, "Отправь точку конца маршрута с помощью геопозиции Telegram...")
     elif message.text == '$$$':
-        localid = findlocalid(chatid)
-        cost = int(getcost(localid))
+        check_if_entry_exists(chat_id)
+        cost = int(getcost(chat_id))
         if cost == -1:
-            poserror(chatid, localid)
+            poserror(chat_id)
         else:
-            res = formatresult(localid, chatid, cost)
-            bot.send_message(chatid, res, parse_mode='MarkdownV2')
+            res = formatresult(chat_id, cost)
+            bot.send_message(chat_id, res, parse_mode='MarkdownV2')
     else:
         bot.send_message(message.chat.id, "Чего? (invalid input)")
 
 
 def switchto1(message):
-    global switches
-    localid = findlocalid(message.chat.id)
-    switches[localid] = 1
+    check_if_entry_exists(message.chat.id)
+    cursor.execute("UPDATE Data SET pointer = 1 WHERE chat_id = " + str(message.chat.id) + ";")
+    con.commit()
 
 
 def switchto2(message):
-    global switches
-    localid = findlocalid(message.chat.id)
-    switches[localid] = 2
+    check_if_entry_exists(message.chat.id)
+    cursor.execute("UPDATE Data SET pointer = 2 WHERE chat_id = " + str(message.chat.id) + ";")
+    con.commit()
+
+# if there is no entry in DB for this chat - make one
+def check_if_entry_exists(userid):
+    chat_id = cursor.execute("SELECT chat_id FROM Data WHERE chat_id = " + str(userid) + ";").fetchall()  # fetch 'list' of 'tuple', .fetchall()[0][0] - get actual int
+
+    if not chat_id:     # if there is no such chat in DB - make a new entry
+        cursor.execute("INSERT INTO Data (chat_id, latitude_1, longitude_1, latitude_2, longitude_1, pointer) VALUES ("
+                       + str(userid) + ", 'NOT_DEFINED', 'NOT_DEFINED', 'NOT_DEFINED', 'NOT_DEFINED', 1);")
+        con.commit()
+
+    return userid
 
 
-def findlocalid(userid):
-    global startpos, finishpos, chatids, switches
+def getcost(chat_id):
+    positions_list = cursor.execute("SELECT * FROM Data WHERE chat_id = " + str(chat_id) + ";").fetchall()
 
-    if userid not in chatids:  # проверяем, есть ли в базе такой chat id
-        chatids.append(userid)  # если у нас появляется новый chat id, мы добавляем индекс в листы
-        switches.append(1)  # для того, чтобы позже добавлять туда строки геопозиций
-        startpos.append("TEST STRING")  # по факту это просто фикс out of range exception
-        finishpos.append("STRING TEST")
+    start_lat = str(positions_list[0][1])
+    start_lon = str(positions_list[0][2])
+    finish_lat = str(positions_list[0][3])
+    finish_lon = str(positions_list[0][4])
 
-    localid = -1
-
-    for i in range(0, len(chatids)):  # находим и назначаем localid
-        if chatids[i] == userid:
-            localid = i
-
-    return localid
-
-
-def getcost(localid):
-    global startpos, finishpos, chatids, switches
-
-    if startpos[localid] != 'TEST STRING' and finishpos[localid] != 'STRING TEST':
-        route = startpos[localid] + str("~") + finishpos[localid]
+    # check if both geo positions has been set
+    # if so - make a formatted string for a GET request and get a trip price from resulting JSON
+    if start_lat != 'NOT_DEFINED' and finish_lat != 'NOT_DEFINED':
+        route = start_lon + str(",") + start_lat + str("~") + finish_lon + str(",") + finish_lat
         url = 'https://taxi-routeinfo.taxi.yandex.net/taxi_info?clid=' + config.clid + '&apikey=' + config.apikey + '&rll=' + route
         res = requests.get(url)
         json = res.json()
         cost = json['options'][0]['price']
     else:
-        cost = -1;
-    return cost;
+        cost = -1
+    return cost
 
 
-def poserror(chatid, localid):
-    global startpos, finishpos
+def poserror(chat_id):
+    positions_list = cursor.execute("SELECT * FROM Data WHERE chat_id = " + str(chat_id) + ";").fetchall()
+    start_lat = str(positions_list[0][1])
+    finish_lat = str(positions_list[0][3])
 
-    if startpos[localid] == 'TEST STRING' and finishpos[localid] == 'STRING TEST':
-        bot.send_message(chatid, 'Сначала нужно отметить обе точки маршрута!')
-    elif startpos[localid] != 'TEST STRING' and finishpos[localid] == 'STRING TEST':
-        bot.send_message(chatid, 'Нужно отметить конец маршрута!')
-    elif startpos[localid] == 'TEST STRING' and finishpos[localid] != 'STRING TEST':
-        bot.send_message(chatid, 'Нужно отметить начало маршрута!')
-
-
-def createlink(localid):
-    global startpos, finishpos
-    start = startpos[localid].split(sep=',')
-    finish = finishpos[localid].split(sep=',')
-
-    link = ('https://3.redirect.appmetrica.yandex.com/route?start-lat=' + start[1] + '&start-lon=' + start[0] +
-            '&end-lat=' + finish[1] + '&end-lon=' + finish[0] + '&level=50&appmetrica_tracking_id=1178268795219780156')
-
-    return link;
+    if start_lat == 'NOT_DEFINED' and finish_lat == 'NOT_DEFINED':
+        bot.send_message(chat_id, 'Сначала нужно отметить обе точки маршрута!')
+    elif start_lat != 'NOT_DEFINED' and finish_lat == 'NOT_DEFINED':
+        bot.send_message(chat_id, 'Нужно отметить конец маршрута!')
+    elif start_lat == 'NOT_DEFINED' and finish_lat != 'NOT_DEFINED':
+        bot.send_message(chat_id, 'Нужно отметить начало маршрута!')
 
 
-def formatresult(localid, chatid, cost):
+def createlink(chat_id):
+    positions_list = cursor.execute("SELECT * FROM Data WHERE chat_id = " + str(chat_id) + ";").fetchall()
+
+    start_lat = str(positions_list[0][1])
+    start_lon = str(positions_list[0][2])
+    finish_lat = str(positions_list[0][3])
+    finish_lon = str(positions_list[0][4])
+
+    link = ('https://3.redirect.appmetrica.yandex.com/route?start-lat=' + start_lat + '&start-lon=' + start_lon +
+            '&end-lat=' + finish_lat + '&end-lon=' + finish_lon + '&level=50&appmetrica_tracking_id=1178268795219780156')
+
+    return link
+
+
+def formatresult(chat_id, cost):
 
     fake1 = cost + random.randint(cost//10*-1, cost//10)
     fake2 = cost + random.randint(cost//10*-1, cost//10)
 
-    url = createlink(localid)
+    url = createlink(chat_id)
     url2 = 'https://youtu.be/dQw4w9WgXcQ'
     url3 = 'https://youtu.be/8aPpF15_gTA'
     res = ('[Яндекс:](' + url + ') ' + str(cost) + " р\n" + '[FakeTaxi 1:](' + url2 + ') ' +
                  str(fake1) + " р\n" + '[FakeTaxi 2:](' + url3 + ') ' + str(fake2) + " р\n")
 
-    return res;
+    return res
 
 def keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
