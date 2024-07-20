@@ -11,11 +11,6 @@ bot = telebot.TeleBot(config.token)
 con = sqlite3.connect("taxigram.db", check_same_thread=False)
 cursor = con.cursor()
 
-# chatids = []
-# switches = []
-# startpos = []
-# finishpos = []
-
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
